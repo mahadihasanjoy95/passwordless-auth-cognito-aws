@@ -1,8 +1,8 @@
-import boto3
-import os
 import json
-import uuid
+import os
 import random
+
+import boto3
 from botocore.exceptions import ClientError
 
 client = boto3.client('cognito-idp')

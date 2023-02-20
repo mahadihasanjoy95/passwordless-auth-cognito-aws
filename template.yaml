@@ -259,3 +259,61 @@ Resources:
           - Ref: AWS::StackName
       AutoConfigurationEnabled: 'true'
     DependsOn: ApplicationResourceGroup
+
+  eventBridgeTargetFunc:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/lambdas/
+      Handler: eventBridgeTarget.lambda_handler
+      Runtime: python3.9
+
+  eventBridgeMessagePushFunc:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/lambdas/
+      Handler: eventBridgeMessagePass.lambda_handler
+      Runtime: python3.9
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Resource: '*'
+              Action:
+                - events:PutEvents
+      Events:
+        eventBridgeMessagePushFunc:
+          Type: Api
+          Properties:
+            Path: /event/push
+            RestApiId: !Ref CognitoPlatformApi
+            Method: get
+            Auth:
+              Authorizer: NONE
+  EventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "EventRule"
+      EventPattern:
+        source:
+          - "demo.orders"
+        detail:
+          state:
+            - "created"
+      State: "ENABLED"
+      Targets:
+        - Arn:
+            Fn::GetAtt:
+              - "eventBridgeTargetFunc"
+              - "Arn"
+          Id: "invoiceServiceTarget"
+
+  PermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: "eventBridgeTargetFunc"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn:
+        Fn::GetAtt:
+          - "EventRule"
+          - "Arn"

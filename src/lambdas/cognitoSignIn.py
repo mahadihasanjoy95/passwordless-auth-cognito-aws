@@ -1,8 +1,8 @@
 import json
-
-import boto3
 import os
 import random
+
+import boto3
 
 USER_PASS_AUTH_FLOW = 'USER_PASSWORD_AUTH'
 CUSTOM_AUTH_FLOW = 'CUSTOM_AUTH'

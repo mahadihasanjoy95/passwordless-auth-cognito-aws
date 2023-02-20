@@ -1,6 +1,3 @@
-import json
-
-
 def lambda_handler(event, context):
     """Auto Confirm User
 

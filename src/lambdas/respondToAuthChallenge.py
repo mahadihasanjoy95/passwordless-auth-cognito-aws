@@ -1,7 +1,7 @@
 import json
+import os
 
 import boto3
-import os
 
 cognito_client = boto3.client('cognito-idp')
 client_id = os.getenv('UserPoolClient')
