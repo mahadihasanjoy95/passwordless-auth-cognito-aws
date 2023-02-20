@@ -197,7 +197,7 @@ Resources:
     Type: AWS::Serverless::Api
     DependsOn: UserPoolClient
     Properties:
-      Name: "CognitoPlatformApi"
+      Name: !Sub "${Stage}-Cognito-Platform-Api-Gateway"
       StageName: !Ref Stage
       Auth:
         DefaultAuthorizer: CustomCognitoAuthorizer
