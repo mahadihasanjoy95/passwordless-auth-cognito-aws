@@ -1,0 +1,254 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  passless-solution
+
+  Sample SAM Template for passless-solution
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+    MemorySize: 128
+    Tracing: Active
+  Api:
+    TracingEnabled: true
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+  UserPoolName:
+    Type: String
+    Default: PassLessUserPool
+    Description: The name you want the User Pool to be created with
+  SESFromAddress:
+    Type: String
+    Default: niloy369@gmail.com
+    Description: The e-mail address to send the secret login code from
+
+Resources:
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/lambdas/
+      Handler: helloWorld.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Events:
+        HelloWorld:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            RestApiId: !Ref CognitoPlatformApi
+            Path: /hello
+            Method: get
+  CreateUserFunc:
+    Type: AWS::Serverless::Function
+    Properties:
+      Environment:
+        Variables:
+          UserPool: !Ref UserPool
+          UserPoolClient: !Ref UserPoolClient
+      CodeUri: src/lambdas/
+      Handler: createUser.lambda_handler
+      Runtime: python3.9
+      Events:
+        CreateUser:
+          Type: Api
+          Properties:
+            Path: /user/create
+            Method: post
+  DefineAuthChallenge:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/lambdas/
+      Handler: defineAuthChallenge.lambda_handler
+      Runtime: python3.9
+
+  CreateAuthChallenge:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/lambdas/
+      Handler: createAuthChallenge.lambda_handler
+      Runtime: python3.9
+      Environment:
+        Variables:
+          SES_FROM_ADDRESS: !Ref SESFromAddress
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+              Resource: "*"
+  VerifyAuthChallengeResponse:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/lambdas/
+      Handler: verifyAuthChallenge.lambda_handler
+      Runtime: python3.9
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminUpdateUserAttributes
+              Resource: "*"
+  CognitoSignIn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Environment:
+        Variables:
+          UserPool: !Ref UserPool
+          UserPoolClient: !Ref UserPoolClient
+      Events:
+        CognitoSignIn:
+          Type: Api
+          Properties:
+            Path: /user/signIn
+            Method: post
+      CodeUri: src/lambdas/
+      Handler: cognitoSignIn.lambda_handler
+      Runtime: python3.9
+  CognitoVerifySignIn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Environment:
+        Variables:
+          UserPool: !Ref UserPool
+          UserPoolClient: !Ref UserPoolClient
+      Events:
+        CognitoVerifySignIn:
+          Type: Api
+          Properties:
+            Path: /user/verify
+            Method: post
+      CodeUri: src/lambdas/
+      Handler: respondToAuthChallenge.lambda_handler
+      Runtime: python3.9
+  PreSignUp:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/lambdas/
+      Handler: autoConfirmUser.lambda_handler
+      Runtime: python3.9
+  PostAuthentication:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/lambdas/
+      Handler: autoConfirmUser.lambda_handler
+      Runtime: python3.9
+      Role: !GetAtt PostAuthenticationRole.Arn
+  PostAuthenticationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  UserPool:
+    Type: "AWS::Cognito::UserPool"
+    Properties:
+      UserPoolName: !Ref UserPoolName
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: false
+          RequireNumbers: false
+          RequireSymbols: false
+          RequireUppercase: false
+      UsernameAttributes:
+        - email
+      MfaConfiguration: "OFF"
+      LambdaConfig:
+        CreateAuthChallenge: !GetAtt CreateAuthChallenge.Arn
+        DefineAuthChallenge: !GetAtt DefineAuthChallenge.Arn
+        PreSignUp: !GetAtt PreSignUp.Arn
+        VerifyAuthChallengeResponse: !GetAtt VerifyAuthChallengeResponse.Arn
+        PostAuthentication: !GetAtt PostAuthentication.Arn
+  UserPoolClient:
+    Type: "AWS::Cognito::UserPoolClient"
+    Properties:
+      ClientName: email-auth-client
+      GenerateSecret: false
+      UserPoolId: !Ref UserPool
+      ExplicitAuthFlows:
+        - CUSTOM_AUTH_FLOW_ONLY
+  CognitoPlatformApi:
+    Type: AWS::Serverless::Api
+    DependsOn: UserPoolClient
+    Properties:
+      Name: "CognitoPlatformApi"
+      StageName: !Ref Stage
+      Auth:
+        DefaultAuthorizer: CustomCognitoAuthorizer
+        Authorizers:
+          CustomCognitoAuthorizer:
+            UserPoolArn: !GetAtt UserPool.Arn
+  DefineAuthChallengeInvocationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt DefineAuthChallenge.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+  CreateAuthChallengeInvocationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt CreateAuthChallenge.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+  VerifyAuthChallengeResponseInvocationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt VerifyAuthChallengeResponse.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+  PreSignUpInvocationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt PreSignUp.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+  PostAuthenticationInvocationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt PostAuthentication.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+  ApplicationResourceGroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name:
+        Fn::Join:
+        - ''
+        - - ApplicationInsights-SAM-
+          - Ref: AWS::StackName
+      ResourceQuery:
+        Type: CLOUDFORMATION_STACK_1_0
+  ApplicationInsightsMonitoring:
+    Type: AWS::ApplicationInsights::Application
+    Properties:
+      ResourceGroupName:
+        Fn::Join:
+        - ''
+        - - ApplicationInsights-SAM-
+          - Ref: AWS::StackName
+      AutoConfigurationEnabled: 'true'
+    DependsOn: ApplicationResourceGroup
