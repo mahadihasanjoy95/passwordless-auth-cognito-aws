@@ -8,6 +8,6 @@ architecture = "x86_64"
 handler = "helloWorld.lambda_handler"
 manifest_hash = ""
 packagetype = "Zip"
-functions = ["HelloWorldFunction", "CreateUserFunc", "DefineAuthChallenge", "CreateAuthChallenge", "VerifyAuthChallengeResponse", "CognitoSignIn", "CognitoVerifySignIn", "PreSignUp", "PostAuthentication", "eventBridgeTargetFunc", "eventBridgeMessagePushFunc"]
+functions = ["HelloWorldFunction", "CreateUserFunc", "AuroraConnector", "DefineAuthChallenge", "CreateAuthChallenge", "VerifyAuthChallengeResponse", "CognitoSignIn", "CognitoVerifySignIn", "PreSignUp", "PostAuthentication", "eventBridgeTargetFunc", "eventBridgeMessagePushFunc"]
 
 [layer_build_definitions]

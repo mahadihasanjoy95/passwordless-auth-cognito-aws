@@ -25,7 +25,19 @@ Parameters:
     Type: String
     Default: niloy369@gmail.com
     Description: The e-mail address to send the secret login code from
-
+  Tag:
+    Type: "String"
+    Default: aws-aurora-vpc
+  DBUsername:
+    Type: "String"
+    Default: mahadi
+  DBPassword:
+    Type: "String"
+    Default: Babu1995
+  KmsKeyId:
+    Description: KMS Key ID to use for encrypting secrets
+    Type: String
+    Default: 76469d22-c205-4275-b7dd-33cad075b0ce
 Resources:
   HelloWorldFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
@@ -59,6 +71,35 @@ Resources:
             Method: post
             Auth:
               Authorizer: NONE
+  AuroraConnector:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/lambdas/
+      Handler: auroraConnector.lambda_handler
+      Runtime: python3.9
+      Events:
+        AuroraConnector:
+          Type: Api
+          Properties:
+            Path: /aurora
+            RestApiId: !Ref CognitoPlatformApi
+            Method: get
+            Auth:
+              Authorizer: NONE
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                -  rds-data:ExecuteStatement
+              Resource: "*"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: "*"
+
   DefineAuthChallenge:
     Type: AWS::Serverless::Function
     Properties:
@@ -317,3 +358,102 @@ Resources:
         Fn::GetAtt:
           - "EventRule"
           - "Arn"
+  VPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: "10.0.0.0/16"
+      Tags:
+      - Key: "Name"
+        Value: !Ref "Tag"
+
+  SubnetA:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+          Ref: 'AWS::Region'
+      VpcId: !Ref "VPC"
+      CidrBlock: "10.0.0.0/24"
+
+  SubnetB:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+          Ref: 'AWS::Region'
+      VpcId: !Ref "VPC"
+      CidrBlock: "10.0.1.0/24"
+
+  RouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref "VPC"
+
+  SubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupName: "subnetgroup"
+      DBSubnetGroupDescription: "Subnet Group"
+      SubnetIds:
+      - !Ref "SubnetA"
+      - !Ref "SubnetB"
+
+  InstanceSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: "Example Security Group"
+      GroupDescription: "RDS traffic"
+      VpcId: !Ref "VPC"
+      SecurityGroupEgress:
+      - IpProtocol: "-1"
+        CidrIp: "0.0.0.0/0"
+
+  InstanceSecurityGroupIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: "InstanceSecurityGroup"
+    Properties:
+      GroupId: !Ref "InstanceSecurityGroup"
+      IpProtocol: "tcp"
+      FromPort: "0"
+      ToPort: "65535"
+      SourceSecurityGroupId: !Ref "InstanceSecurityGroup"
+
+  RDSCluster:
+    Type: "AWS::RDS::DBCluster"
+    Properties:
+#      HttpEndpointEnabled: true
+      DBSubnetGroupName: !Ref "SubnetGroup"
+      MasterUsername: !Join [ '', [ '{{resolve:secretsmanager:', !Ref DBSecret, ':SecretString:username}}' ] ]
+      MasterUserPassword: !Join [ '', [ '{{resolve:secretsmanager:', !Ref DBSecret, ':SecretString:password}}' ] ]
+      DatabaseName: "products"
+      Engine: "aurora"
+      EngineMode: "serverless"
+      VpcSecurityGroupIds:
+      - !Ref "InstanceSecurityGroup"
+      ScalingConfiguration:
+        AutoPause: true
+        MaxCapacity: 16
+        MinCapacity: 2
+        SecondsUntilAutoPause: 300
+  DBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Username and password for database
+      GenerateSecretString:
+        GenerateStringKey: "password"
+        PasswordLength: 20
+        SecretStringTemplate: '{"username": "mahadi"}'
+        ExcludePunctuation: True
+      Tags:
+        - Key: Name
+          Value: db-secret
+      Name: DBSecret
+
+  DBSecretAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref DBSecret
+      TargetId: !Ref RDSCluster
+      TargetType: AWS::RDS::DBCluster
