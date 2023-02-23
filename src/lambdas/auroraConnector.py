@@ -1,27 +1,20 @@
 import json
+import os
 
-import boto3
+import sqlalchemy
 
-rds_client = boto3.client('rds-data')
-
-database_name = "products"
-db_cluster_arn = "arn:aws:rds:ap-northeast-1:534678543881:cluster:passless-solution-rdscluster-vgym39evltzw"
-db_credentials_secrets_arn = "arn:aws:secretsmanager:ap-northeast-1:534678543881:secret:DBSecret-Swhk4V"
+cluster_arn = os.getenv('DbCluster')
+secret_arn = os.getenv('DbSecret')
 
 
 def lambda_handler(event, context):
-    sql = "select * from Persons;"
+    engine = sqlalchemy.create_engine('mysql://:@/products',
+                                      echo=True,
+                                      connect_args=dict(aurora_cluster_arn=cluster_arn, secret_arn=secret_arn))
 
-    response = rds_client.execute_statement(
-        secretArn=db_credentials_secrets_arn,
-        database=database_name,
-        resourceArn=db_cluster_arn,
-        sql=sql
-    )
-    print("RESPONSE:::::::::::: ", response)
-
-    return {"statusCode": 200,
-            'body': json.dumps(response["records"]),
-            # "location": ip.text.replace("\n", "")
-
-            }
+    with engine.connect() as conn:
+        for result in conn.execute("select * from Persons"):
+            print(result)
+            return {"statusCode": 200,
+                    'body': json.dumps(result["records"]),
+                    }

@@ -3,12 +3,14 @@ import os
 import random
 
 import boto3
+import datetime
 from botocore.exceptions import ClientError
 
 client = boto3.client('cognito-idp')
 
 UserPool = os.getenv('UserPool')
 client_id = os.getenv('UserPoolClient')
+event_client = boto3.client('events')
 
 lower = "abcdefghijklmnopqrstuvwxyz"
 upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -38,6 +40,17 @@ def lambda_handler(message, context):
             UserAttributes=[{'Name': 'email',
                              'Value': user['email']}],
         )
+        eventResponse = event_client.put_events(Entries=[
+            {
+                "Detail": json.dumps({
+                    "state": "created",
+                    "id": user['email']
+                }),
+                "DetailType": 'New User',
+                "Source": 'demo.users',
+                "Time": datetime.datetime.now()
+            }
+        ])
         return {
             "statusCode": 200,
             "headers": {},

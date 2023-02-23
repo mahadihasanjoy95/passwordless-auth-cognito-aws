@@ -13,6 +13,7 @@ Globals:
     Tracing: Active
   Api:
     TracingEnabled: true
+# It's just the input will take from users, default will initiate the values
 Parameters:
   Stage:
     Type: String
@@ -38,6 +39,10 @@ Parameters:
     Description: KMS Key ID to use for encrypting secrets
     Type: String
     Default: 76469d22-c205-4275-b7dd-33cad075b0ce
+  DbName:
+    Type: String
+    Default: products
+# All the services and resources in our application
 Resources:
   HelloWorldFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
@@ -71,9 +76,20 @@ Resources:
             Method: post
             Auth:
               Authorizer: NONE
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Resource: '*'
+              Action:
+                - events:PutEvents
   AuroraConnector:
     Type: AWS::Serverless::Function
     Properties:
+      Environment:
+        Variables:
+          DbName: !Ref DbName
+          DbCluster: !GetAtt RDSCluster.DBClusterArn
+          DbSecret: !Ref 'DBSecret'
       CodeUri: src/lambdas/
       Handler: auroraConnector.lambda_handler
       Runtime: python3.9
@@ -307,6 +323,28 @@ Resources:
       CodeUri: src/lambdas/
       Handler: eventBridgeTarget.lambda_handler
       Runtime: python3.9
+      Events:
+        SqsTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt SqsForEventBridge.Arn
+      Environment:
+        Variables:
+          SES_FROM_ADDRESS: !Ref SESFromAddress
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+              Resource: "*"
+  SqsForEventBridge:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: SqsForEventBridge
+      Tags:
+        - Key: Name
+          Value: SqsForEventBridge
 
   eventBridgeMessagePushFunc:
     Type: AWS::Serverless::Function
@@ -335,7 +373,7 @@ Resources:
       Description: "EventRule"
       EventPattern:
         source:
-          - "demo.orders"
+          - "demo.users"
         detail:
           state:
             - "created"
@@ -343,21 +381,22 @@ Resources:
       Targets:
         - Arn:
             Fn::GetAtt:
-              - "eventBridgeTargetFunc"
+              - "SqsForEventBridge"
               - "Arn"
-          Id: "invoiceServiceTarget"
+          Id: "SQSqueue"
 
-  PermissionForEventsToInvokeLambda:
-    Type: AWS::Lambda::Permission
+  EventBridgeToToSqsPolicy:
+    Type: AWS::SQS::QueuePolicy
     Properties:
-      FunctionName:
-        Ref: "eventBridgeTargetFunc"
-      Action: "lambda:InvokeFunction"
-      Principal: "events.amazonaws.com"
-      SourceArn:
-        Fn::GetAtt:
-          - "EventRule"
-          - "Arn"
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: SQS:SendMessage
+            Resource: !GetAtt SqsForEventBridge.Arn
+      Queues:
+        - Ref: SqsForEventBridge
   VPC:
     Type: "AWS::EC2::VPC"
     Properties:
@@ -427,7 +466,7 @@ Resources:
       DBSubnetGroupName: !Ref "SubnetGroup"
       MasterUsername: !Join [ '', [ '{{resolve:secretsmanager:', !Ref DBSecret, ':SecretString:username}}' ] ]
       MasterUserPassword: !Join [ '', [ '{{resolve:secretsmanager:', !Ref DBSecret, ':SecretString:password}}' ] ]
-      DatabaseName: "products"
+      DatabaseName: !Ref DbName
       Engine: "aurora"
       EngineMode: "serverless"
       VpcSecurityGroupIds:

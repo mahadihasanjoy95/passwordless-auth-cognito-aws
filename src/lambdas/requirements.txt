@@ -1,1 +1,2 @@
 requests
+SQLAlchemy==0.7.9
