@@ -8,6 +8,14 @@ architecture = "x86_64"
 handler = "helloWorld.lambda_handler"
 manifest_hash = ""
 packagetype = "Zip"
-functions = ["HelloWorldFunction", "CreateUserFunc", "AuroraConnector", "DefineAuthChallenge", "CreateAuthChallenge", "VerifyAuthChallengeResponse", "CognitoSignIn", "CognitoVerifySignIn", "PreSignUp", "PostAuthentication", "eventBridgeTargetFunc", "eventBridgeMessagePushFunc"]
+functions = ["HelloWorldFunction", "CreateUserFunc", "PowerTollsTest", "AuroraConnector", "DefineAuthChallenge", "CreateAuthChallenge", "VerifyAuthChallengeResponse", "CognitoSignIn", "CognitoVerifySignIn", "PreSignUp", "PostAuthentication", "eventBridgeTargetFunc", "eventBridgeMessagePushFunc"]
 
 [layer_build_definitions]
+[layer_build_definitions.c5cfb3ce-698a-4ca8-a6f1-ff40efce6a40]
+layer_name = "MyLibLayer"
+codeuri = "/home/mahadi/Documents/python/passless-solution/src/my_lib_layer"
+build_method = "python3.9"
+compatible_runtimes = ["python3.9"]
+architecture = "x86_64"
+manifest_hash = ""
+layer = "MyLibLayer"

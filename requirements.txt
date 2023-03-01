@@ -1,11 +1,12 @@
+boto3~=1.26.55
+botocore~=1.29.55
+pydantic~=1.10.4
 requests~=2.25.1
-SQLAlchemy==0.7.9
-
 certifi~=2020.6.20
 cryptography~=39.0.0
 six~=1.16.0
 idna~=3.3
 urllib3~=1.26.5
 chardet~=4.0.0
-boto3~=1.26.55
-botocore~=1.29.55
+SQLAlchemy~=0.7.9
+aws-lambda-powertools[tracer,validation]  # Tracer requires AWS X-Ray SDK dependency

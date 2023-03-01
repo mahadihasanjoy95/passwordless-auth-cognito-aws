@@ -82,9 +82,50 @@ Resources:
               Resource: '*'
               Action:
                 - events:PutEvents
+  PowerTollsTest:
+    Type: AWS::Serverless::Function
+    Properties:
+      Layers:
+        - !Ref MyLibLayer
+      Environment:
+        Variables:
+          DbName: !Ref DbName
+          DbCluster: !GetAtt RDSCluster.DBClusterArn
+          DbSecret: !Ref 'DBSecret'
+      CodeUri: src/lambdas/
+      Handler: powertools_test.lambda_handler
+      Runtime: python3.9
+      Events:
+        PowerTollsTest:
+          Type: Api
+          Properties:
+            Path: /powertools
+            RestApiId: !Ref CognitoPlatformApi
+            Method: get
+            Auth:
+              Authorizer: NONE
+        PowerTollsTestName:
+          Type: Api
+          Properties:
+            Path: /powertools/{name}
+            RestApiId: !Ref CognitoPlatformApi
+            Method: get
+            Auth:
+              Authorizer: NONE
+        PowerTollsTestPost:
+          Type: Api
+          Properties:
+            Path: /post/powertool
+            RestApiId: !Ref CognitoPlatformApi
+            Method: post
+            Auth:
+              Authorizer: NONE
+
   AuroraConnector:
     Type: AWS::Serverless::Function
     Properties:
+      Layers:
+        - !Ref MyLibLayer
       Environment:
         Variables:
           DbName: !Ref DbName
@@ -496,3 +537,11 @@ Resources:
       SecretId: !Ref DBSecret
       TargetId: !Ref RDSCluster
       TargetType: AWS::RDS::DBCluster
+  MyLibLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: src/my_lib_layer
+      CompatibleRuntimes:
+        - python3.9
+    Metadata:
+      BuildMethod: python3.9
